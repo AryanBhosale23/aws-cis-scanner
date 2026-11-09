@@ -30,7 +30,7 @@ def _no_buckets(ctx: Context) -> Finding:
     title="S3 public access block is on for the account and each bucket",
     service="s3",
     controls=Controls(
-        cis=f"{CIS_VERSION}, 2.1.4",  # verify the number against your pinned version
+        cis=f"{CIS_VERSION}, 3.1.4",  # verify the number against your pinned version
         nist_800_53_r5="AC-3",
         iso_27001_2022="A.8.3",
         soc2="CC6.1",
@@ -80,7 +80,7 @@ def _pab_finding(resource: str, cfg: dict[str, bool]) -> Finding:
     title="S3 default encryption is enabled",
     service="s3",
     controls=Controls(
-        cis=f"{CIS_VERSION}, 2.1.x (TODO: find the encryption-at-rest recommendation)",
+        cis=f"{CIS_VERSION}, 3.1.5 (TODO: find the encryption-at-rest recommendation)",
         nist_800_53_r5="SC-28",
         iso_27001_2022="A.8.24",
         soc2="CC6.1",

@@ -11,7 +11,7 @@ from scanner.models import CIS_VERSION, Context, Controls, Finding, Status
     title="Root user has MFA enabled",
     service="iam",
     controls=Controls(
-        cis=f"{CIS_VERSION}, 1.5",  # verify the number against your pinned version
+        cis=f"{CIS_VERSION}, 2.5",  # verify the number against your pinned version
         nist_800_53_r5="IA-2(1)",
         iso_27001_2022="A.8.5",
         soc2="CC6.1",

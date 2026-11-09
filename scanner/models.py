@@ -8,7 +8,7 @@ from typing import Any
 
 # Pin one CIS benchmark version and say so in the README. Verify every CIS
 # number in scanner/checks/ against this version before you publish.
-CIS_VERSION = "CIS AWS Foundations Benchmark v3.0.0"
+CIS_VERSION = "CIS AWS Foundations Benchmark v7.1.0"
 
 
 class Status(StrEnum):

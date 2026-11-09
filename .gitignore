@@ -15,3 +15,4 @@ venv/
 .ruff_cache/
 # Real scan output stays local. Only redacted samples go in examples/
 evidence/
+*.pdf

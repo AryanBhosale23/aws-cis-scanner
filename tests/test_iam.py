@@ -23,7 +23,7 @@ def test_iam_01_carries_its_control_ids(ctx):
     assert record.controls.nist_800_53_r5 == "IA-2(1)"
     assert record.controls.iso_27001_2022 == "A.8.5"
     assert record.controls.soc2 == "CC6.1"
-    assert record.controls.cis.endswith("1.5")
+    assert record.controls.cis.endswith("2.5")
 
 
 def test_a_failing_aws_call_becomes_error_not_a_crash(ctx, monkeypatch):
