@@ -1,0 +1,17 @@
+# Secrets and AWS config: never commit these
+.env
+.env.*
+*.pem
+*.key
+.aws/
+credentials
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+# Real scan output stays local. Only redacted samples go in examples/
+evidence/
