@@ -2,9 +2,31 @@
 
 from __future__ import annotations
 
+import csv
+import io
+import time
+
+from botocore.exceptions import ClientError
+
 from scanner.checks.base import check
 from scanner.models import CIS_VERSION, Context, Controls, Finding, Status
 
+
+def _credential_report(ctx: Context) -> list[dict[str, str]]:
+    iam = ctx.session.client("iam")
+    iam.generate_credential_report()
+    for _ in range(10):
+        try:
+            content = iam.get_credential_report()["Content"]
+            break
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] not in ("ReportInProgress", "ReportNotPresent"):
+                raise
+            time.sleep(1)
+    else:
+        raise RuntimeError("Credential report was not ready after 10 tries")
+    text = content.decode("utf-8")
+    return list(csv.DictReader(io.StringIO(text)))
 
 @check(
     check_id="IAM-01",
@@ -54,6 +76,34 @@ def root_has_no_access_keys(ctx: Context) -> list[Finding]:
             evidence={"AccountAccessKeysPresent": keys_present},
         )
     ]
+
+@check(
+    check_id="IAM-03",
+    title="Every console user has MFA",
+    service="iam",
+    controls=Controls(
+        cis=f"{CIS_VERSION}, 2.10",
+        nist_800_53_r5="IA-2(1)",
+        iso_27001_2022="A.8.5",
+        soc2="CC6.1",
+    ),
+    remediation="Enable MFA for the user, or remove their console password.",
+)
+def console_users_have_mfa(ctx: Context) -> list[Finding]:
+    findings: list[Finding] = []
+    for row in _credential_report(ctx):
+        if row["user"] == "<root_account>":
+            continue
+        has_password = row["password_enabled"] == "true"
+        has_mfa = row["mfa_active"] == "true"
+        findings.append(
+            Finding(
+                status=Status.FAIL if has_password and not has_mfa else Status.PASS,
+                resource=row["arn"],
+                evidence={"password_enabled": has_password, "mfa_active": has_mfa},
+            )
+        )
+    return findings
 
 # TODO (your turn, Nov 5): IAM-02 "Root user has no access keys"
 #   Hint: the same get_account_summary() call has a key called AccountAccessKeysPresent.
