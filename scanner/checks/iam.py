@@ -30,6 +30,30 @@ def root_mfa_enabled(ctx: Context) -> list[Finding]:
         )
     ]
 
+@check(
+    check_id="IAM-02",
+    title="Root has no access keys",
+    service="iam",
+    controls=Controls(
+        cis=f"{CIS_VERSION}, 2.4",  # verify the number against your pinned version
+        nist_800_53_r5="AC-6(5)",
+        iso_27001_2022="A.8.2",
+        soc2="CC6.1",
+    ),
+    remediation="Sign in as the root user and delete its access keys." 
+    "Use an IAM role or user for programmatic access instead.",
+)
+def root_has_no_access_keys(ctx: Context) -> list[Finding]:
+    iam = ctx.session.client("iam")
+    summary = iam.get_account_summary()["SummaryMap"]
+    keys_present = summary["AccountAccessKeysPresent"]
+    return [
+        Finding(
+            status=Status.PASS if keys_present == 0 else Status.FAIL,
+            resource=f"arn:aws:iam::{ctx.account_id}:root",
+            evidence={"AccountAccessKeysPresent": keys_present},
+        )
+    ]
 
 # TODO (your turn, Nov 5): IAM-02 "Root user has no access keys"
 #   Hint: the same get_account_summary() call has a key called AccountAccessKeysPresent.

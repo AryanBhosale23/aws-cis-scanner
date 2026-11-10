@@ -1,4 +1,4 @@
-from scanner.checks.iam import root_mfa_enabled
+from scanner.checks.iam import root_has_no_access_keys, root_mfa_enabled
 from scanner.models import Status
 
 
@@ -35,3 +35,17 @@ def test_a_failing_aws_call_becomes_error_not_a_crash(ctx, monkeypatch):
     [record] = root_mfa_enabled.run(broken)
     assert record.status is Status.ERROR
     assert "AccessDenied" in record.evidence["error"]
+
+def test_iam_02_passes_when_root_has_no_access_keys(ctx):
+    [record] = root_has_no_access_keys.run(ctx)
+    assert record.status is Status.PASS
+    assert record.check_id == "IAM-02"
+    assert record.evidence == {"AccountAccessKeysPresent": 0}
+
+
+def test_iam_02_fails_when_root_has_access_keys(ctx, iam_backend):
+    # moto cannot create root keys through its API, so we set its internal flag.
+    iam_backend.account_summary._account_access_keys_present = 1
+    [record] = root_has_no_access_keys.run(ctx)
+    assert record.status is Status.FAIL
+    assert record.evidence == {"AccountAccessKeysPresent": 1}
