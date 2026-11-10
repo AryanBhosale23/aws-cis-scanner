@@ -1,3 +1,8 @@
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from scanner.checks import iam
 from scanner.checks.iam import console_users_have_mfa, root_has_no_access_keys, root_mfa_enabled
 from scanner.models import Status
 
@@ -96,3 +101,74 @@ def test_iam_03_every_user_is_its_own_result(ctx):
     assert records["alice"].status is Status.FAIL
     assert records["bob"].status is Status.PASS
     assert records["carol"].status is Status.PASS
+
+NOW = datetime(2026, 11, 10, tzinfo=UTC)
+
+
+def days_ago(n):
+    return (NOW - timedelta(days=n)).isoformat()
+
+
+def make_row(name, **overrides):
+    """One fake line of the credential report. Everything is 'off' unless you override it."""
+    row = {
+        "user": name,
+        "arn": f"arn:aws:iam::123456789012:user/{name}",
+        "password_enabled": "false",
+        "password_last_used": "N/A",
+        "password_last_changed": "N/A",
+        "access_key_1_active": "false",
+        "access_key_1_last_rotated": "N/A",
+        "access_key_1_last_used_date": "N/A",
+        "access_key_2_active": "false",
+        "access_key_2_last_rotated": "N/A",
+        "access_key_2_last_used_date": "N/A",
+    }
+    row.update(overrides)
+    return row
+
+
+@pytest.fixture
+def fake_report(monkeypatch):
+    def install(*rows):
+        monkeypatch.setattr(iam, "_credential_report", lambda ctx: list(rows))
+        monkeypatch.setattr(iam, "_utcnow", lambda: NOW)
+
+    return install
+
+def test_iam_04_passes_for_a_recently_used_password(ctx, fake_report):
+    fake_report(
+        make_row(
+            "dave",
+            password_enabled="true",
+            password_last_changed=days_ago(200),
+            password_last_used=days_ago(5),
+        )
+    )
+    records = iam.unused_credentials.run(ctx)
+    assert by_user(records)["dave"].status is Status.PASS
+
+
+def test_iam_04_fails_for_a_password_unused_for_60_days(ctx, fake_report):
+    fake_report(
+        make_row(
+            "erin",
+            password_enabled="true",
+            password_last_changed=days_ago(200),
+            password_last_used=days_ago(60),
+        )
+    )
+    records = iam.unused_credentials.run(ctx)
+    assert by_user(records)["erin"].status is Status.FAIL
+
+
+def test_iam_04_fails_for_an_access_key_that_was_never_used(ctx, fake_report):
+    fake_report(
+        make_row(
+            "frank",
+            access_key_1_active="true",
+            access_key_1_last_rotated=days_ago(100),
+        )
+    )
+    records = iam.unused_credentials.run(ctx)
+    assert by_user(records)["frank"].status is Status.FAIL

@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import time
+from datetime import UTC, datetime
 
 from botocore.exceptions import ClientError
 
@@ -101,6 +102,73 @@ def console_users_have_mfa(ctx: Context) -> list[Finding]:
                 status=Status.FAIL if has_password and not has_mfa else Status.PASS,
                 resource=row["arn"],
                 evidence={"password_enabled": has_password, "mfa_active": has_mfa},
+            )
+        )
+    return findings
+
+STALE_AFTER_DAYS = 45
+
+
+def _utcnow() -> datetime:
+    """Today's date and time. Tests swap this for a fixed moment."""
+    return datetime.now(UTC)
+
+
+def _parse_time(text: str) -> datetime | None:
+    """Turn a report timestamp into a datetime. 'N/A', 'no_information' etc. give None."""
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _active_credentials(row: dict[str, str]) -> list[tuple[str, str, str]]:
+    """What this user can use right now, as (name, last used, created)."""
+    found = []
+    if row["password_enabled"] == "true":
+        found.append(("password", row["password_last_used"], row["password_last_changed"]))
+    for n in ("1", "2"):
+        if row[f"access_key_{n}_active"] == "true":
+            found.append(
+                (
+                    f"access_key_{n}",
+                    row[f"access_key_{n}_last_used_date"],
+                    row[f"access_key_{n}_last_rotated"],
+                )
+            )
+    return found
+
+
+@check(
+    check_id="IAM-04",
+    title="No active credential has gone unused for 45 days or more",
+    service="iam",
+    controls=Controls(
+        cis=f"{CIS_VERSION}, 2.11",
+        nist_800_53_r5="AC-2(3)",
+        iso_27001_2022="A.5.18",
+        soc2="CC6.2",
+    ),
+    remediation="Disable or delete the password or access key that has not been used for 45 days.",
+)
+def unused_credentials(ctx: Context) -> list[Finding]:
+    now = _utcnow()
+    findings = []
+    for row in _credential_report(ctx):
+        if row["user"] == "<root_account>":
+            continue
+        days_unused = {}
+        for name, last_used, created in _active_credentials(row):
+            since = _parse_time(last_used) or _parse_time(created)
+            if since is None:
+                raise ValueError(f"{row['user']}: no usable date for {name}")
+            days_unused[name] = (now - since).days
+        stale = any(days >= STALE_AFTER_DAYS for days in days_unused.values())
+        findings.append(
+            Finding(
+                status=Status.FAIL if stale else Status.PASS,
+                resource=row["arn"],
+                evidence={"days_unused": days_unused, "limit_days": STALE_AFTER_DAYS},
             )
         )
     return findings
