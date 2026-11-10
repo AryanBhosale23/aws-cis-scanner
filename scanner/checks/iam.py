@@ -173,6 +173,45 @@ def unused_credentials(ctx: Context) -> list[Finding]:
         )
     return findings
 
+MAX_KEY_AGE_DAYS = 90
+
+
+@check(
+    check_id="IAM-05",
+    title="Every active access key was rotated within the last 90 days",
+    service="iam",
+    controls=Controls(
+        cis=f"{CIS_VERSION}, 2.12",
+        nist_800_53_r5="IA-5",
+        iso_27001_2022="A.5.17",
+        soc2="CC6.1",
+    ),
+    remediation="Create a new key, move your apps to it, then delete the old key.",
+)
+def old_access_keys(ctx: Context) -> list[Finding]:
+    now = _utcnow()
+    findings = []
+    for row in _credential_report(ctx):
+        if row["user"] == "<root_account>":
+            continue
+        key_age_days = {}
+        for n in ("1", "2"):
+            if row[f"access_key_{n}_active"] != "true":
+                continue
+            rotated = _parse_time(row[f"access_key_{n}_last_rotated"])
+            if rotated is None:
+                raise ValueError(f"{row['user']}: no usable date for access_key_{n}")
+            key_age_days[f"access_key_{n}"] = (now - rotated).days
+        too_old = any(days > MAX_KEY_AGE_DAYS for days in key_age_days.values())
+        findings.append(
+            Finding(
+                status=Status.FAIL if too_old else Status.PASS,
+                resource=row["arn"],
+                evidence={"key_age_days": key_age_days, "limit_days": MAX_KEY_AGE_DAYS},
+            )
+        )
+    return findings
+
 # TODO (your turn, Nov 5): IAM-02 "Root user has no access keys"
 #   Hint: the same get_account_summary() call has a key called AccountAccessKeysPresent.
 #   Controls from the brief: NIST AC-6(5), ISO A.8.2, SOC 2 CC6.1.

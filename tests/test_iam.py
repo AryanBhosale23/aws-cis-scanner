@@ -172,3 +172,50 @@ def test_iam_04_fails_for_an_access_key_that_was_never_used(ctx, fake_report):
     )
     records = iam.unused_credentials.run(ctx)
     assert by_user(records)["frank"].status is Status.FAIL
+
+def test_iam_05_passes_for_a_key_rotated_30_days_ago(ctx, fake_report):
+    fake_report(
+        make_row(
+            "gina",
+            access_key_1_active="true",
+            access_key_1_last_rotated=days_ago(30),
+        )
+    )
+    records = iam.old_access_keys.run(ctx)
+    assert by_user(records)["gina"].status is Status.PASS
+
+
+def test_iam_05_fails_for_a_key_rotated_120_days_ago(ctx, fake_report):
+    fake_report(
+        make_row(
+            "hank",
+            access_key_1_active="true",
+            access_key_1_last_rotated=days_ago(120),
+        )
+    )
+    records = iam.old_access_keys.run(ctx)
+    assert by_user(records)["hank"].status is Status.FAIL
+
+
+def test_iam_05_passes_for_a_key_rotated_exactly_90_days_ago(ctx, fake_report):
+    fake_report(
+        make_row(
+            "iris",
+            access_key_1_active="true",
+            access_key_1_last_rotated=days_ago(90),
+        )
+    )
+    records = iam.old_access_keys.run(ctx)
+    assert by_user(records)["iris"].status is Status.PASS
+
+
+def test_iam_05_passes_for_an_old_key_that_is_switched_off(ctx, fake_report):
+    fake_report(
+        make_row(
+            "jack",
+            access_key_1_active="false",
+            access_key_1_last_rotated=days_ago(300),
+        )
+    )
+    records = iam.old_access_keys.run(ctx)
+    assert by_user(records)["jack"].status is Status.PASS
