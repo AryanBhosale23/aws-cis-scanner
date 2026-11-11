@@ -74,7 +74,6 @@ def _pab_finding(resource: str, cfg: dict[str, bool]) -> Finding:
     return Finding(Status.PASS if ok else Status.FAIL, resource, settings)
 
 
-
 @check(
     check_id="S3-08",
     title="S3 default encryption is enabled",
@@ -113,5 +112,66 @@ def default_encryption(ctx: Context) -> list[Finding]:
         ]
         findings.append(
             Finding(Status.PASS if algos else Status.FAIL, arn, {"encryption": algos or None})
+        )
+    return findings
+
+@check(
+    check_id="S3-09",
+    title="S3 versioning is enabled",
+    service="s3",
+    controls=Controls(
+        cis=f"{CIS_VERSION}, none",
+        nist_800_53_r5="CP-9",
+        iso_27001_2022="A.8.13",
+        soc2="A1.2",
+    ),
+    remediation="Turn on versioning so deleted or overwritten objects can be restored.",
+)
+def versioning_enabled(ctx: Context) -> list[Finding]:
+    s3 = ctx.session.client("s3")
+    names = _bucket_names(ctx)
+    if not names:
+        return [_no_buckets(ctx)]
+    findings: list[Finding] = []
+    for name in names:
+        arn = f"arn:aws:s3:::{name}"
+        try:
+            status = s3.get_bucket_versioning(Bucket=name).get("Status")
+        except ClientError as exc:
+            findings.append(Finding(Status.ERROR, arn, {"error": exc.response["Error"]["Code"]}))
+            continue
+        ok = status == "Enabled"
+        findings.append(Finding(Status.PASS if ok else Status.FAIL, arn, {"versioning": status}))
+    return findings
+
+
+@check(
+    check_id="S3-10",
+    title="S3 server access logging is enabled",
+    service="s3",
+    controls=Controls(
+        cis=f"{CIS_VERSION}, 4.4 (partial)",
+        nist_800_53_r5="AU-12",
+        iso_27001_2022="A.8.15",
+        soc2="CC7.2",
+    ),
+    remediation="Turn on server access logging and send the logs to a separate bucket.",
+)
+def access_logging_enabled(ctx: Context) -> list[Finding]:
+    s3 = ctx.session.client("s3")
+    names = _bucket_names(ctx)
+    if not names:
+        return [_no_buckets(ctx)]
+    findings: list[Finding] = []
+    for name in names:
+        arn = f"arn:aws:s3:::{name}"
+        try:
+            log_config = s3.get_bucket_logging(Bucket=name).get("LoggingEnabled")
+        except ClientError as exc:
+            findings.append(Finding(Status.ERROR, arn, {"error": exc.response["Error"]["Code"]}))
+            continue
+        target = log_config["TargetBucket"] if log_config else None
+        findings.append(
+            Finding(Status.PASS if log_config else Status.FAIL, arn, {"log_target_bucket": target})
         )
     return findings

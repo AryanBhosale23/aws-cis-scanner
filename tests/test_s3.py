@@ -1,7 +1,12 @@
 import boto3
 from botocore.exceptions import ClientError
 
-from scanner.checks.s3 import default_encryption, public_access_block
+from scanner.checks.s3 import (
+    access_logging_enabled,
+    default_encryption,
+    public_access_block,
+    versioning_enabled,
+)
 from scanner.models import Status
 
 ALL_ON = {
@@ -125,3 +130,71 @@ def test_s3_08_each_bucket_is_its_own_result(ctx):
     make_bucket("bucket-one")
     make_bucket("bucket-two")
     assert len(default_encryption.run(ctx)) == 2
+
+# ---- S3-09 versioning ---------------------------------------------------------------------
+
+
+def test_s3_09_fails_when_versioning_was_never_turned_on(ctx):
+    make_bucket("bucket-plain")
+    [record] = versioning_enabled.run(ctx)
+    assert record.status is Status.FAIL
+    assert record.evidence == {"versioning": None}
+
+
+def test_s3_09_passes_when_versioning_is_enabled(ctx):
+    make_bucket("bucket-versioned")
+    boto3.client("s3", region_name="us-east-1").put_bucket_versioning(
+        Bucket="bucket-versioned", VersioningConfiguration={"Status": "Enabled"}
+    )
+    [record] = versioning_enabled.run(ctx)
+    assert record.status is Status.PASS
+    assert record.evidence == {"versioning": "Enabled"}
+
+
+def test_s3_09_fails_when_versioning_is_suspended(ctx):
+    make_bucket("bucket-paused")
+    s3 = boto3.client("s3", region_name="us-east-1")
+    for state in ("Enabled", "Suspended"):
+        s3.put_bucket_versioning(
+            Bucket="bucket-paused", VersioningConfiguration={"Status": state}
+        )
+    [record] = versioning_enabled.run(ctx)
+    assert record.status is Status.FAIL
+    assert record.evidence == {"versioning": "Suspended"}
+
+
+def test_s3_09_with_no_buckets_still_leaves_evidence(ctx):
+    [record] = versioning_enabled.run(ctx)
+    assert record.status is Status.PASS
+    assert record.evidence == {"buckets_found": 0}
+
+
+# ---- S3-10 access logging -----------------------------------------------------------------
+
+
+def test_s3_10_fails_when_logging_is_off(ctx):
+    make_bucket("bucket-quiet")
+    [record] = access_logging_enabled.run(ctx)
+    assert record.status is Status.FAIL
+    assert record.evidence == {"log_target_bucket": None}
+
+
+def test_s3_10_passes_when_logging_is_on(ctx):
+    make_bucket("bucket-logged")
+    make_bucket("bucket-logs")
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.put_bucket_acl(
+        Bucket="bucket-logs",
+        GrantWrite='uri="http://acs.amazonaws.com/groups/s3/LogDelivery"',
+        GrantReadACP='uri="http://acs.amazonaws.com/groups/s3/LogDelivery"',
+    )
+    s3.put_bucket_logging(
+        Bucket="bucket-logged",
+        BucketLoggingStatus={
+            "LoggingEnabled": {"TargetBucket": "bucket-logs", "TargetPrefix": "logs/"}
+        },
+    )
+    records = by_resource(access_logging_enabled.run(ctx))
+    assert records["bucket-logged"].status is Status.PASS
+    assert records["bucket-logged"].evidence == {"log_target_bucket": "bucket-logs"}
+    assert records["bucket-logs"].status is Status.FAIL  # the log bucket is a bucket too
