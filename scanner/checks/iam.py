@@ -212,6 +212,67 @@ def old_access_keys(ctx: Context) -> list[Finding]:
         )
     return findings
 
+def _as_list(value):
+    """AWS lets a field be one item or a list of items. Always hand back a list."""
+    return value if isinstance(value, list) else [value]
+
+
+def _is_admin(document: dict) -> bool:
+    """True if one statement says: Allow, every action, every resource."""
+    for statement in _as_list(document["Statement"]):
+        if (
+            statement["Effect"] == "Allow"
+            and "*" in _as_list(statement.get("Action", []))
+            and "*" in _as_list(statement.get("Resource", []))
+        ):
+            return True
+    return False
+
+
+@check(
+    check_id="IAM-06",
+    title="No attached IAM policy grants full administrator access",
+    service="iam",
+    controls=Controls(
+        cis=f"{CIS_VERSION}, 2.14",
+        nist_800_53_r5="AC-6",
+        iso_27001_2022="A.8.2",
+        soc2="CC6.3",
+    ),
+    remediation="Detach the policy from every user, group and role, then delete or narrow it.",
+)
+def admin_policies(ctx: Context) -> list[Finding]:
+    iam = ctx.session.client("iam")
+    pages = iam.get_paginator("list_policies").paginate(Scope="All", OnlyAttached=True)
+    findings = []
+    for page in pages:
+        for policy in page["Policies"]:
+            arn = policy["Arn"]
+            version = iam.get_policy_version(
+                PolicyArn=arn, VersionId=policy["DefaultVersionId"]
+            )
+            is_admin = _is_admin(version["PolicyVersion"]["Document"])
+            evidence = {"allows_everything": is_admin}
+            if is_admin:
+                found = iam.list_entities_for_policy(PolicyArn=arn)
+                evidence["attached_to"] = {
+                    "users": [u["UserName"] for u in found["PolicyUsers"]],
+                    "groups": [g["GroupName"] for g in found["PolicyGroups"]],
+                    "roles": [r["RoleName"] for r in found["PolicyRoles"]],
+                }
+            findings.append(
+                Finding(
+                    status=Status.FAIL if is_admin else Status.PASS,
+                    resource=arn,
+                    evidence=evidence,
+                )
+            )
+    if not findings:
+        return [
+            Finding(Status.PASS, f"account:{ctx.account_id}", {"attached_policies_found": 0})
+        ]
+    return findings
+
 # TODO (your turn, Nov 5): IAM-02 "Root user has no access keys"
 #   Hint: the same get_account_summary() call has a key called AccountAccessKeysPresent.
 #   Controls from the brief: NIST AC-6(5), ISO A.8.2, SOC 2 CC6.1.

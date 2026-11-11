@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -219,3 +220,79 @@ def test_iam_05_passes_for_an_old_key_that_is_switched_off(ctx, fake_report):
     )
     records = iam.old_access_keys.run(ctx)
     assert by_user(records)["jack"].status is Status.PASS
+
+def make_policy(iam, name, *statements):
+    """Create a managed policy in the fake AWS and return its ARN."""
+    document = {"Version": "2012-10-17", "Statement": list(statements)}
+    response = iam.create_policy(PolicyName=name, PolicyDocument=json.dumps(document))
+    return response["Policy"]["Arn"]
+
+
+def attach_to_new_user(iam, policy_arn, user="alice"):
+    """Policies only count when attached, so give this one to a fresh user."""
+    iam.create_user(UserName=user)
+    iam.attach_user_policy(UserName=user, PolicyArn=policy_arn)
+
+
+def test_iam_06_fails_for_an_admin_policy_that_is_attached(ctx):
+    iam_client = ctx.session.client("iam")
+    arn = make_policy(
+        iam_client, "god-mode", {"Effect": "Allow", "Action": "*", "Resource": "*"}
+    )
+    attach_to_new_user(iam_client, arn)
+
+    records = iam.admin_policies.run(ctx)
+
+    assert by_user(records)["god-mode"].status is Status.FAIL
+
+
+def test_iam_06_passes_for_a_narrow_policy(ctx):
+    iam_client = ctx.session.client("iam")
+    arn = make_policy(
+        iam_client,
+        "readonly-s3",
+        {"Effect": "Allow", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::my-bucket/*"},
+    )
+    attach_to_new_user(iam_client, arn)
+
+    records = iam.admin_policies.run(ctx)
+
+    assert by_user(records)["readonly-s3"].status is Status.PASS
+
+
+def test_iam_06_passes_for_a_deny_everything_policy(ctx):
+    iam_client = ctx.session.client("iam")
+    arn = make_policy(
+        iam_client, "deny-all", {"Effect": "Deny", "Action": "*", "Resource": "*"}
+    )
+    attach_to_new_user(iam_client, arn)
+
+    records = iam.admin_policies.run(ctx)
+
+    assert by_user(records)["deny-all"].status is Status.PASS
+
+
+def test_iam_06_fails_when_admin_is_hidden_inside_lists(ctx):
+    iam_client = ctx.session.client("iam")
+    arn = make_policy(
+        iam_client,
+        "sneaky-admin",
+        {"Effect": "Allow", "Action": ["s3:GetObject", "*"], "Resource": ["*"]},
+    )
+    attach_to_new_user(iam_client, arn)
+
+    records = iam.admin_policies.run(ctx)
+
+    assert by_user(records)["sneaky-admin"].status is Status.FAIL
+
+
+def test_iam_06_ignores_an_admin_policy_that_is_not_attached(ctx):
+    iam_client = ctx.session.client("iam")
+    make_policy(
+        iam_client, "unused-god-mode", {"Effect": "Allow", "Action": "*", "Resource": "*"}
+    )
+
+    records = iam.admin_policies.run(ctx)
+
+    assert all(r.status is Status.PASS for r in records)
+    assert "unused-god-mode" not in by_user(records)
