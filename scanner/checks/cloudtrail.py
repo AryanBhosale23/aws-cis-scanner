@@ -50,3 +50,63 @@ def multi_region_trail_logging(ctx: Context) -> list[Finding]:
         problems[trail["Name"]] = issues
     evidence = {"trails_found": len(trails), "problems": problems}
     return [Finding(Status.FAIL, f"account:{ctx.account_id}", evidence)]
+
+def _trails(ctx: Context) -> list[dict]:
+    return ctx.session.client("cloudtrail").describe_trails()["trailList"]
+
+
+def _no_trails(ctx: Context) -> Finding:
+    """No trail means no logging at all, so the checks on trail settings fail, not pass."""
+    return Finding(Status.FAIL, f"account:{ctx.account_id}", {"trails_found": 0})
+
+
+@check(
+    check_id="CT-12",
+    title="CloudTrail log file validation is enabled",
+    service="cloudtrail",
+    controls=Controls(
+        cis=f"{CIS_VERSION}, 4.2",
+        nist_800_53_r5="AU-9",
+        iso_27001_2022="A.8.15",
+        soc2="CC7.2",
+    ),
+    remediation="Turn on log file validation for the trail.",
+)
+def log_file_validation(ctx: Context) -> list[Finding]:
+    trails = _trails(ctx)
+    if not trails:
+        return [_no_trails(ctx)]
+    return [
+        Finding(
+            Status.PASS if trail.get("LogFileValidationEnabled") else Status.FAIL,
+            trail["TrailARN"],
+            {"log_file_validation": bool(trail.get("LogFileValidationEnabled"))},
+        )
+        for trail in trails
+    ]
+
+
+@check(
+    check_id="CT-13",
+    title="CloudTrail logs are encrypted with a KMS key",
+    service="cloudtrail",
+    controls=Controls(
+        cis=f"{CIS_VERSION}, 4.5",
+        nist_800_53_r5="SC-28",
+        iso_27001_2022="A.8.24",
+        soc2="CC6.1",
+    ),
+    remediation="Choose a KMS key for the trail's log file encryption.",
+)
+def logs_encrypted_with_kms(ctx: Context) -> list[Finding]:
+    trails = _trails(ctx)
+    if not trails:
+        return [_no_trails(ctx)]
+    return [
+        Finding(
+            Status.PASS if trail.get("KmsKeyId") else Status.FAIL,
+            trail["TrailARN"],
+            {"kms_key_id": trail.get("KmsKeyId")},
+        )
+        for trail in trails
+    ]
