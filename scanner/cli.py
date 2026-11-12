@@ -43,10 +43,14 @@ def run(profile: str | None, region: str, output_dir: Path, only: tuple[str, ...
         detail = f"  ({failed} of {len(records)} resources)" if len(records) > 1 and failed else ""
         click.echo(f"[{worst.value}] {check_id:<7} {records[0].title}{detail}")
 
-    counts = Counter(r.status for r in results)
+        counts = Counter(r.status for r in results)
+    checks_passed = sum(
+        1 for records in per_check.values() if all(r.status is Status.PASS for r in records)
+    )
     run_dir = write_evidence(results, output_dir)
+    click.echo(f"\nSummary: {checks_passed} of {len(per_check)} checks passed")
     click.echo(
-        f"\nSummary: {counts[Status.PASS]} passed, {counts[Status.FAIL]} failed, "
-        f"{counts[Status.ERROR]} error"
+        f"Results: {counts[Status.PASS]} passed, {counts[Status.FAIL]} failed, "
+        f"{counts[Status.ERROR]} error ({len(results)} records)"
     )
     click.echo(f"Evidence: {run_dir}/ ({len(per_check)} files)")
