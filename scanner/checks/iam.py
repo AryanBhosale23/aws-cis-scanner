@@ -311,11 +311,3 @@ def password_policy(ctx: Context) -> list[Finding]:
             evidence={"minimum_length": length, "reuse_prevention": reuse, "problems": problems},
         )
     ]
-
-# TODO (your turn, Nov 5): IAM-02 "Root user has no access keys"
-#   Hint: the same get_account_summary() call has a key called AccountAccessKeysPresent.
-#   Controls from the brief: NIST AC-6(5), ISO A.8.2, SOC 2 CC6.1.
-# TODO (your turn, Nov 5): IAM-03 "Every user with a console password has MFA"
-#   Hint: iam.generate_credential_report() then iam.get_credential_report(); read the CSV.
-#   A user "has a console password" when password_enabled is "true"; MFA is mfa_active.
-#   Skip the <root_account> row. One Finding per user, so each user is its own evidence.
