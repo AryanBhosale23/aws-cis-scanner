@@ -14,11 +14,12 @@ from scanner.models import CIS_VERSION, Context, Controls, Finding, Status
 
 
 def _credential_report(ctx: Context) -> list[dict[str, str]]:
+    """Every user's row from the IAM credential report, each stamped with the report's own time."""
     iam = ctx.session.client("iam")
     iam.generate_credential_report()
     for _ in range(10):
         try:
-            content = iam.get_credential_report()["Content"]
+            response = iam.get_credential_report()
             break
         except ClientError as exc:
             if exc.response["Error"]["Code"] not in ("ReportInProgress", "ReportNotPresent"):
@@ -26,8 +27,14 @@ def _credential_report(ctx: Context) -> list[dict[str, str]]:
             time.sleep(1)
     else:
         raise RuntimeError("Credential report was not ready after 10 tries")
-    text = content.decode("utf-8")
-    return list(csv.DictReader(io.StringIO(text)))
+    text = response["Content"].decode("utf-8")
+    rows = list(csv.DictReader(io.StringIO(text)))
+    # AWS may hand back a copy up to 4 hours old, so the evidence must say which copy it read.
+    generated = response["GeneratedTime"].isoformat()
+    for row in rows:
+        row["report_generated"] = generated
+    return rows
+
 
 @check(
     check_id="IAM-01",
@@ -101,7 +108,11 @@ def console_users_have_mfa(ctx: Context) -> list[Finding]:
             Finding(
                 status=Status.FAIL if has_password and not has_mfa else Status.PASS,
                 resource=row["arn"],
-                evidence={"password_enabled": has_password, "mfa_active": has_mfa},
+                evidence={
+                    "password_enabled": has_password,
+                    "mfa_active": has_mfa,
+                    "report_generated": row["report_generated"],
+                },
             )
         )
     return findings
@@ -168,7 +179,11 @@ def unused_credentials(ctx: Context) -> list[Finding]:
             Finding(
                 status=Status.FAIL if stale else Status.PASS,
                 resource=row["arn"],
-                evidence={"days_unused": days_unused, "limit_days": STALE_AFTER_DAYS},
+                evidence={
+                    "days_unused": days_unused,
+                    "limit_days": STALE_AFTER_DAYS,
+                    "report_generated": row["report_generated"],
+                },
             )
         )
     return findings
@@ -207,7 +222,11 @@ def old_access_keys(ctx: Context) -> list[Finding]:
             Finding(
                 status=Status.FAIL if too_old else Status.PASS,
                 resource=row["arn"],
-                evidence={"key_age_days": key_age_days, "limit_days": MAX_KEY_AGE_DAYS},
+                evidence={
+                    "key_age_days": key_age_days,
+                    "limit_days": MAX_KEY_AGE_DAYS,
+                    "report_generated": row["report_generated"],
+                },
             )
         )
     return findings

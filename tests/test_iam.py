@@ -124,6 +124,7 @@ def make_row(name, **overrides):
         "access_key_2_active": "false",
         "access_key_2_last_rotated": "N/A",
         "access_key_2_last_used_date": "N/A",
+        "report_generated": "2026-11-10T00:00:00+00:00",
     }
     row.update(overrides)
     return row
@@ -329,3 +330,30 @@ def test_iam_20_passes_when_length_and_reuse_prevention_are_strong(ctx):
     [record] = iam.password_policy.run(ctx)
     assert record.status is Status.PASS
     assert record.evidence["problems"] == []
+
+# ---- credential report age ----------------------------------------------------------------
+
+
+def test_credential_report_rows_say_when_aws_generated_the_report(ctx):
+    make_user(ctx.session.client("iam"), "alice", console=True)
+    rows = iam._credential_report(ctx)
+    assert rows
+    assert all(row["report_generated"].startswith("2015-02-02T20:02:02") for row in rows)
+
+
+def test_iam_03_evidence_says_how_old_the_report_is(ctx):
+    make_user(ctx.session.client("iam"), "alice", console=True)
+    records = by_user(console_users_have_mfa.run(ctx))
+    assert records["alice"].evidence["report_generated"].startswith("2015-02-02T20:02:02")
+
+
+def test_iam_04_evidence_says_how_old_the_report_is(ctx, fake_report):
+    fake_report(make_row("zed", report_generated="2026-11-09T12:00:00+00:00"))
+    [record] = iam.unused_credentials.run(ctx)
+    assert record.evidence["report_generated"] == "2026-11-09T12:00:00+00:00"
+
+
+def test_iam_05_evidence_says_how_old_the_report_is(ctx, fake_report):
+    fake_report(make_row("zed", report_generated="2026-11-09T12:00:00+00:00"))
+    [record] = iam.old_access_keys.run(ctx)
+    assert record.evidence["report_generated"] == "2026-11-09T12:00:00+00:00"
