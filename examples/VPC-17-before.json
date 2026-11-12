@@ -1,0 +1,44 @@
+[
+  {
+    "check_id": "VPC-17",
+    "title": "No security group allows SSH (port 22) from 0.0.0.0/0",
+    "status": "PASS",
+    "resource": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-0d753ed703d0fa41f",
+    "region": "us-east-1",
+    "account_id": "123456789012",
+    "timestamp": "2026-11-11T23:48:26Z",
+    "controls": {
+      "cis": "CIS AWS Foundations Benchmark v7.1.0, 6.3",
+      "nist_800_53_r5": "SC-7",
+      "iso_27001_2022": "A.8.20",
+      "soc2": "CC6.6"
+    },
+    "evidence": {
+      "group_name": "default",
+      "open_rules": []
+    },
+    "remediation": "Replace the 0.0.0.0/0 source with a trusted range, or delete the rule."
+  },
+  {
+    "check_id": "VPC-17",
+    "title": "No security group allows SSH (port 22) from 0.0.0.0/0",
+    "status": "FAIL",
+    "resource": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-02409671976bd0e91",
+    "region": "us-east-1",
+    "account_id": "123456789012",
+    "timestamp": "2026-11-11T23:48:26Z",
+    "controls": {
+      "cis": "CIS AWS Foundations Benchmark v7.1.0, 6.3",
+      "nist_800_53_r5": "SC-7",
+      "iso_27001_2022": "A.8.20",
+      "soc2": "CC6.6"
+    },
+    "evidence": {
+      "group_name": "launch-wizard-1",
+      "open_rules": [
+        "tcp 22-22"
+      ]
+    },
+    "remediation": "Replace the 0.0.0.0/0 source with a trusted range, or delete the rule."
+  }
+]

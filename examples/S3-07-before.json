@@ -1,0 +1,24 @@
+[
+  {
+    "check_id": "S3-07",
+    "title": "S3 public access block is on for the account and each bucket",
+    "status": "FAIL",
+    "resource": "arn:aws:s3:::account/123456789012",
+    "region": "us-east-1",
+    "account_id": "123456789012",
+    "timestamp": "2026-11-09T22:13:18Z",
+    "controls": {
+      "cis": "CIS AWS Foundations Benchmark v3.0.0, 2.1.4",
+      "nist_800_53_r5": "AC-3",
+      "iso_27001_2022": "A.8.3",
+      "soc2": "CC6.1"
+    },
+    "evidence": {
+      "BlockPublicAcls": false,
+      "IgnorePublicAcls": false,
+      "BlockPublicPolicy": false,
+      "RestrictPublicBuckets": false
+    },
+    "remediation": "Enable all four S3 Block Public Access settings on the account and the bucket."
+  }
+]

@@ -80,7 +80,8 @@ report). First full scan (all 20 checks): **10 of 20 checks passed, 11 findings.
 **Fixed, with before and after evidence**
 
 - **VPC-17, SSH open to the world.** The scan found the security group `launch-wizard-1` allowing TCP 22
-  from `0.0.0.0/0` (an EC2 wizard default). I removed the rule and re-ran: VPC-17 went from FAIL to PASS.
+  from `0.0.0.0/0` (an EC2 wizard default, left over from a test). I deleted the unused group and
+  re-ran nine minutes later: VPC-17 went from FAIL to PASS.
 - **S3-07, public access block.** The first scan (November 9) found all four account-level S3 Block
   Public Access settings switched off, so nothing stopped a bucket from being made public by mistake.
   I turned all four on, and the next scan, ten minutes later, returned PASS with all four settings
