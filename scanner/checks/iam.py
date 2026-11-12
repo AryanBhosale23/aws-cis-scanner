@@ -273,6 +273,45 @@ def admin_policies(ctx: Context) -> list[Finding]:
         ]
     return findings
 
+MIN_PASSWORD_LENGTH = 14
+MIN_PASSWORD_REUSE_PREVENTION = 24
+
+
+@check(
+    check_id="IAM-20",
+    title="The IAM password policy requires 14+ characters and remembers 24 passwords",
+    service="iam",
+    controls=Controls(
+        cis=f"{CIS_VERSION}, 2.8 and 2.9",
+        nist_800_53_r5="IA-5(1)",
+        iso_27001_2022="A.5.17",
+        soc2="CC6.1",
+    ),
+    remediation="Set the minimum password length to 14 and prevent reuse of the last 24 passwords.",
+)
+def password_policy(ctx: Context) -> list[Finding]:
+    iam = ctx.session.client("iam")
+    try:
+        policy = iam.get_account_password_policy()["PasswordPolicy"]
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] != "NoSuchEntity":
+            raise
+        policy = {}  # no custom password policy has been set
+    length = policy.get("MinimumPasswordLength")
+    reuse = policy.get("PasswordReusePrevention")
+    problems = []
+    if length is None or length < MIN_PASSWORD_LENGTH:
+        problems.append(f"minimum length is below {MIN_PASSWORD_LENGTH}")
+    if reuse is None or reuse < MIN_PASSWORD_REUSE_PREVENTION:
+        problems.append(f"password reuse prevention is below {MIN_PASSWORD_REUSE_PREVENTION}")
+    return [
+        Finding(
+            status=Status.FAIL if problems else Status.PASS,
+            resource=f"account:{ctx.account_id}",
+            evidence={"minimum_length": length, "reuse_prevention": reuse, "problems": problems},
+        )
+    ]
+
 # TODO (your turn, Nov 5): IAM-02 "Root user has no access keys"
 #   Hint: the same get_account_summary() call has a key called AccountAccessKeysPresent.
 #   Controls from the brief: NIST AC-6(5), ISO A.8.2, SOC 2 CC6.1.

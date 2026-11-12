@@ -296,3 +296,36 @@ def test_iam_06_ignores_an_admin_policy_that_is_not_attached(ctx):
 
     assert all(r.status is Status.PASS for r in records)
     assert "unused-god-mode" not in by_user(records)
+
+# ---- IAM-20 password policy ---------------------------------------------------------------
+
+
+def set_password_policy(ctx, **settings):
+    ctx.session.client("iam").update_account_password_policy(**settings)
+
+
+def test_iam_20_fails_when_no_password_policy_was_set(ctx):
+    [record] = iam.password_policy.run(ctx)
+    assert record.status is Status.FAIL
+    assert record.evidence["minimum_length"] is None
+
+
+def test_iam_20_fails_when_passwords_are_too_short(ctx):
+    set_password_policy(ctx, MinimumPasswordLength=8, PasswordReusePrevention=24)
+    [record] = iam.password_policy.run(ctx)
+    assert record.status is Status.FAIL
+    assert record.evidence["problems"] == ["minimum length is below 14"]
+
+
+def test_iam_20_fails_when_password_reuse_is_not_prevented_enough(ctx):
+    set_password_policy(ctx, MinimumPasswordLength=14, PasswordReusePrevention=5)
+    [record] = iam.password_policy.run(ctx)
+    assert record.status is Status.FAIL
+    assert record.evidence["problems"] == ["password reuse prevention is below 24"]
+
+
+def test_iam_20_passes_when_length_and_reuse_prevention_are_strong(ctx):
+    set_password_policy(ctx, MinimumPasswordLength=14, PasswordReusePrevention=24)
+    [record] = iam.password_policy.run(ctx)
+    assert record.status is Status.PASS
+    assert record.evidence["problems"] == []
