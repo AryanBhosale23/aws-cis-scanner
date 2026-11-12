@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -64,3 +65,12 @@ class Evidence:
         record = asdict(self)
         record["status"] = self.status.value
         return record
+
+def worst_status(records: Iterable[Evidence]) -> Status:
+    """The one status that sums up a group of records: ERROR beats FAIL beats PASS."""
+    statuses = {r.status for r in records}
+    if Status.ERROR in statuses:
+        return Status.ERROR
+    if Status.FAIL in statuses:
+        return Status.FAIL
+    return Status.PASS

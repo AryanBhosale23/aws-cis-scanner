@@ -79,7 +79,7 @@ def _pab_finding(resource: str, cfg: dict[str, bool]) -> Finding:
     title="S3 default encryption is enabled",
     service="s3",
     controls=Controls(
-        cis=f"{CIS_VERSION}, 3.1.5 (TODO: find the encryption-at-rest recommendation)",
+        cis=f"{CIS_VERSION}, 3.1.5",  # Manual in CIS; this check automates part of it
         nist_800_53_r5="SC-28",
         iso_27001_2022="A.8.24",
         soc2="CC6.1",

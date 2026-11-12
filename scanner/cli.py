@@ -8,7 +8,8 @@ from pathlib import Path
 import click
 
 from scanner.evidence import mask_account, write_evidence
-from scanner.models import Status
+from scanner.models import Status, worst_status
+from scanner.report import write_report
 from scanner.runner import build_context, run_all
 
 
@@ -32,25 +33,21 @@ def run(profile: str | None, region: str, output_dir: Path, only: tuple[str, ...
     for r in results:
         per_check[r.check_id].append(r)
     for check_id, records in per_check.items():
-        worst = (
-            Status.ERROR
-            if any(r.status is Status.ERROR for r in records)
-            else Status.FAIL
-            if any(r.status is Status.FAIL for r in records)
-            else Status.PASS
-        )
+        worst = worst_status(records)
         failed = sum(1 for r in records if r.status is not Status.PASS)
         detail = f"  ({failed} of {len(records)} resources)" if len(records) > 1 and failed else ""
         click.echo(f"[{worst.value}] {check_id:<7} {records[0].title}{detail}")
 
-        counts = Counter(r.status for r in results)
+    counts = Counter(r.status for r in results)
     checks_passed = sum(
         1 for records in per_check.values() if all(r.status is Status.PASS for r in records)
     )
     run_dir = write_evidence(results, output_dir)
+    report = write_report(ctx, results, run_dir)
     click.echo(f"\nSummary: {checks_passed} of {len(per_check)} checks passed")
     click.echo(
         f"Results: {counts[Status.PASS]} passed, {counts[Status.FAIL]} failed, "
         f"{counts[Status.ERROR]} error ({len(results)} records)"
     )
     click.echo(f"Evidence: {run_dir}/ ({len(per_check)} files)")
+    click.echo(f"Report: {report}")
