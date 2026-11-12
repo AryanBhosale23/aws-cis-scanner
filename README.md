@@ -134,7 +134,8 @@ than hide it.
   (CIS 2.14 does not audit them either).
 - One region per run. No multi-account or AWS Organizations support yet.
 - IAM-03, IAM-04 and IAM-05 read the IAM credential report, which AWS refreshes at most every 4 hours,
-  so they can lag a change by up to 4 hours.
+     so they can lag a change by up to 4 hours. Each of their evidence records carries `report_generated`,
+     the time of the report it read.
 - The NIST, ISO and SOC 2 columns are my mapping. They are evidence pointers, not a certification.
 - Passing these checks does not make an account secure or an audit pass.
 

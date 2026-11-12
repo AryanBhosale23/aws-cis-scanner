@@ -16,6 +16,8 @@ Scope notes that apply to several checks:
 - **No data must not pass.** If AWS cannot answer, or a needed value is missing, the result is ERROR or FAIL,
   never PASS.
 - **One record per resource** (user, bucket, trail, security group, VPC, key), so each is its own evidence.
+- **Credential report age.** IAM-03, IAM-04 and IAM-05 read the IAM credential report. AWS may return a
+     copy up to 4 hours old, so their evidence records `report_generated` (the time AWS built that copy).
 
 | Check | CIS v7.1.0 | CIS status | NIST 800-53 r5 | ISO 27001:2022 | SOC 2 | Why this mapping / notes |
 |-------|-----------|------------|----------------|----------------|-------|--------------------------|
